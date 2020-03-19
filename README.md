@@ -8,7 +8,7 @@ About 7.5 ms/gate on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
 
 Write code like this:
 
-```
+```cpp
 #include "aqtfhe2.hpp"
 
 int main()
