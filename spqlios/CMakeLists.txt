@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
+project(spqlios)
 
 # This is the nayuki fft processor for the tfhe library
 enable_language(ASM)
