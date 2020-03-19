@@ -11,10 +11,13 @@
 
 namespace {
 
+template <class T, size_t... Shape>
+using nd_array = aqtfhe2::detail::nd_array<T, Shape...>;
+
 template <size_t N, class RandomEngine>
-aqtfhe2::detail::nd_array<bool, N> random_bool_array(RandomEngine& rand)
+nd_array<bool, N> random_bool_array(RandomEngine& rand)
 {
-    aqtfhe2::detail::nd_array<bool, N> ret;
+    nd_array<bool, N> ret;
     std::binomial_distribution<int> binary;
     for (bool& v : ret)
         v = binary(rand);
@@ -24,9 +27,6 @@ aqtfhe2::detail::nd_array<bool, N> random_bool_array(RandomEngine& rand)
 #ifndef NDEBUG
 void test_nd_array()
 {
-    using namespace aqtfhe2;
-    using namespace aqtfhe2::detail;
-
     {
         nd_array<int, 6, 5, 4> ary = {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -150,28 +150,16 @@ void test_nand()
         }
     }
 }
-#endif
 
-}  // namespace
-
-// For simplicity
-using P = aqtfhe2::params::CGGI16;
-using secret_key = aqtfhe2::secret_key<P>;
-using cloud_key = aqtfhe2::cloud_key<P>;
-using encrypted_bit = aqtfhe2::tlwe_lvl0<P>;
-template <class T, size_t... Shape>
-using nd_array = aqtfhe2::detail::nd_array<T, Shape...>;
-
-int main()
-{
-#ifndef NDEBUG
-    test_nd_array();
-    test_tlwe_lvl0();
-    test_trlwe_lvl1();
-    test_trgswfft_external_product();
-    test_bootstrapping();
-    test_nand();
 #else
+
+template <class P>
+void test_performance()
+{
+    using secret_key = aqtfhe2::secret_key<P>;
+    using cloud_key = aqtfhe2::cloud_key<P>;
+    using encrypted_bit = aqtfhe2::tlwe_lvl0<P>;
+
     std::random_device rand;
     auto sk = secret_key::make(rand);
     auto ck = cloud_key::make(rand, sk);
@@ -208,6 +196,25 @@ int main()
     // Check the results
     for (size_t i = 0; i < TEST_SIZE; i++)
         assert(r[i] == sk.decrypt(r_enc[i]));
+}
+#endif
+
+}  // namespace
+
+int main()
+{
+#ifndef NDEBUG
+    test_nd_array();
+    test_tlwe_lvl0();
+    test_trlwe_lvl1();
+    test_trgswfft_external_product();
+    test_bootstrapping();
+    test_nand();
+#else
+    std::cerr << "Old parameter [CGGI16]:\t";
+    test_performance<aqtfhe2::params::CGGI16>();
+    std::cerr << "New parameter [CGGI19]:\t";
+    test_performance<aqtfhe2::params::CGGI19>();
 #endif
 
     return 0;
