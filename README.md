@@ -34,6 +34,20 @@ $ clang++ -std=c++17 -march=native -O3 hoge.cpp -I spqlios/ -L spqlios/build/ -l
 $ ./a.out
 ```
 
+## Performance
+
+About 7.5 ms/gate for old parameter [CGGI16], and 12.4 ms/gate for new parameter [CGGI19].
+Both are measured on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
+
+You can verify this results by using `main.cpp`:
+
+```
+$ make     # Compile main.cpp
+$ ./main   # Run
+Old parameter [CGGI16]:	7507us / gate
+New parameter [CGGI19]:	12392us / gate
+```
+
 ## Caveat
 
 Some functions in aqTFHE2 need a random number generator as argument.
