@@ -30,7 +30,7 @@ int main()
 And compile it:
 
 ```
-$ clang++ -std=c++17 -O3 hoge.cpp -I spqlios/ -L spqlios/build/ -lspqlios
+$ clang++ -std=c++17 -march=native -O3 hoge.cpp -I spqlios/ -L spqlios/build/ -lspqlios
 $ ./a.out
 ```
 
