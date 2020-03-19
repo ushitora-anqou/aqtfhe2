@@ -351,8 +351,7 @@ public:
 
 inline uint32_t double2torus32(double d)
 {
-    // return (d - std::floor(d)) * std::pow(2, 32);
-    return int32_t(int64_t((d - int64_t(d)) * (1L << 32)));
+    return (d - std::floor(d)) * std::pow(2, 32);
 }
 
 template <size_t N>
