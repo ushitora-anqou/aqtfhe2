@@ -80,7 +80,8 @@ void test_trlwe_lvl1()
 
         for (int i = 0; i < 10; i++) {
             auto plain = random_bool_array<P::N()>(rand);
-            auto trlwe = trlwe_lvl1::sym_encrypt(rand, sk.key_lvl1(), plain);
+            auto trlwe = trlwe_lvl1::sym_encrypt(rand, sk.key_lvl1(),
+                                                 P::alphabk(), plain);
             assert(plain == trlwe.sym_decrypt(sk.key_lvl1()));
         }
     }
@@ -99,8 +100,10 @@ void test_trgswfft_external_product()
 
         for (int i = 0; i < 10; i++) {
             auto plain = random_bool_array<P::N()>(rand);
-            auto trlwe = trlwe_lvl1::sym_encrypt(rand, sk.key_lvl1(), plain);
-            auto trgswfft = trgswfft_lvl1::sym_encrypt(rand, sk.key_lvl1(), 1);
+            auto trlwe = trlwe_lvl1::sym_encrypt(rand, sk.key_lvl1(),
+                                                 P::alphabk(), plain);
+            auto trgswfft = trgswfft_lvl1::sym_encrypt(rand, sk.key_lvl1(),
+                                                       P::alphabk(), 1);
             trlwe_lvl1 res;
             trlwe.trgswfft_external_product(/* out */ res, trgswfft);
             assert(plain == res.sym_decrypt(sk.key_lvl1()));

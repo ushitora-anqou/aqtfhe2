@@ -530,7 +530,8 @@ public:
         bkfftlvl01_.reserve(P::n());
         for (size_t i = 0; i < P::n(); i++) {
             bkfftlvl01_.push_back(trgswfft_lvl1<P>::sym_encrypt(
-                rand, key_lvl1, static_cast<uint32_t>(key_lvl0[i])));
+                rand, key_lvl1, P::alphabk(),
+                static_cast<uint32_t>(key_lvl0[i])));
         }
     }
 
@@ -585,7 +586,7 @@ public:
     static trgswfft_lvl1 sym_encrypt(
         RandomEngine &rand,
         const typename secret_key<P>::container_key_lvl1 &key_lvl1,
-        uint32_t plain);
+        double alpha, uint32_t plain);
 
     detail::const_array_slice<double, P::N()> slice(size_t i, size_t j) const
     {
@@ -598,7 +599,7 @@ class trlwe_lvl1 {
     template <class RandomEngine>
     friend trgswfft_lvl1<P> trgswfft_lvl1<P>::sym_encrypt(
         RandomEngine &, const typename secret_key<P>::container_key_lvl1 &,
-        uint32_t);
+        double, uint32_t);
     friend tlwe_lvl1<P> tlwe_lvl0<P>::gate_bootstrapping_to_lvl1(
         const std::vector<trgswfft_lvl1<P>> &) const;
 
@@ -621,11 +622,11 @@ public:
     template <class RandomEngine>
     static trlwe_lvl1 sym_encrypt_zero(
         RandomEngine &rand,
-        const typename secret_key<P>::container_key_lvl1 &key)
+        const typename secret_key<P>::container_key_lvl1 &key, double alpha)
     {
         std::uniform_int_distribution<uint32_t> torus(
             0, std::numeric_limits<uint32_t>::max());
-        std::normal_distribution<double> gaussian(0.0, P::alphabk());
+        std::normal_distribution<double> gaussian(0.0, alpha);
 
         container poly0;
         for (uint32_t &v : poly0)
@@ -641,10 +642,10 @@ public:
     template <class RandomEngine>
     static trlwe_lvl1 sym_encrypt(
         RandomEngine &rand,
-        const typename secret_key<P>::container_key_lvl1 &key,
+        const typename secret_key<P>::container_key_lvl1 &key, double alpha,
         detail::nd_array<bool, P::N()> &plain)
     {
-        trlwe_lvl1 ret = sym_encrypt_zero(rand, key);
+        trlwe_lvl1 ret = sym_encrypt_zero(rand, key, alpha);
         for (size_t i = 0; i < P::N(); i++)
             ret.poly1_[i] += plain[i] ? P::mu() : -P::mu();
         return ret;
@@ -744,27 +745,29 @@ public:
         RandomEngine &rand,
         const typename secret_key<P>::container_key_lvl0 &key, bool plain)
     {
-        return sym_encrypt(rand, key, plain ? P::mu() : -P::mu());
+        return sym_encrypt(rand, key, P::alpha(), plain ? P::mu() : -P::mu());
     }
 
     template <class RandomEngine>
     static tlwe_lvl0 sym_encrypt(
         RandomEngine &rand,
-        const typename secret_key<P>::container_key_lvl0 &key, uint32_t plain)
+        const typename secret_key<P>::container_key_lvl0 &key, double alpha,
+        uint32_t plain)
     {
         container src;
-        sym_encrypt(src.begin(), rand, key, plain);
+        sym_encrypt(src.begin(), rand, key, alpha, plain);
         return tlwe_lvl0{std::move(src)};
     }
 
     template <class RandomEngine>
     static void sym_encrypt(
         detail::array_slice<uint32_t, P::n() + 1> out, RandomEngine &rand,
-        const typename secret_key<P>::container_key_lvl0 &key, uint32_t plain)
+        const typename secret_key<P>::container_key_lvl0 &key, double alpha,
+        uint32_t plain)
     {
         std::uniform_int_distribution<uint32_t> torus(
             0, std::numeric_limits<uint32_t>::max());
-        std::normal_distribution<double> gaussian(0.0, P::alpha());
+        std::normal_distribution<double> gaussian(0.0, alpha);
 
         out[P::n()] = plain + detail::double2torus32(gaussian(rand));
         for (size_t i = 0; i < P::n(); i++) {
@@ -870,7 +873,7 @@ key_switching_key<P>::key_switching_key(
                 uint32_t val = key_lvl1[i] * (k + 1) *
                                (1U << (32 - (j + 1) * P::basebit()));
                 tlwe_lvl0<P>::sym_encrypt(data_.slice(i, j, k), rand, key_lvl0,
-                                          val);
+                                          P::alphaks(), val);
             }
         }
     }
@@ -903,14 +906,15 @@ template <class P>
 template <class RandomEngine>
 trgswfft_lvl1<P> trgswfft_lvl1<P>::sym_encrypt(
     RandomEngine &rand,
-    const typename secret_key<P>::container_key_lvl1 &key_lvl1, uint32_t plain)
+    const typename secret_key<P>::container_key_lvl1 &key_lvl1, double alpha,
+    uint32_t plain)
 {
     // trgsw sym encrypt
     // FIXME: more efficient implementation?
     std::vector<trlwe_lvl1<P>> trgsw;
     trgsw.reserve(2 * P::l());
     for (size_t i = 0; i < 2 * P::l(); i++)
-        trgsw.push_back(trlwe_lvl1<P>::sym_encrypt_zero(rand, key_lvl1));
+        trgsw.push_back(trlwe_lvl1<P>::sym_encrypt_zero(rand, key_lvl1, alpha));
     for (uint32_t i = 0; i < P::l(); i++) {
         uint32_t h = 1U << (32 - (i + 1) * P::Bgbit());
         trgsw[i].poly0_[0] += plain * h;
