@@ -39,7 +39,7 @@ $ ./a.out
 About 7.7 ms/gate for old parameter [CGGI16], and 12.6 ms/gate for new parameter [CGGI19].
 Both are measured on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
 
-You can verify this results by using `main.cpp`:
+You can verify it by using `main.cpp`:
 
 ```
 $ make     # Compile main.cpp
@@ -47,6 +47,9 @@ $ ./main   # Run
 Old parameter [CGGI16]:	7650us / gate
 New parameter [CGGI19]:	12570us / gate
 ```
+
+See [TFHE's web site](https://tfhe.github.io/tfhe/security_and_params.html)
+for the details about old and new parameters.
 
 ## Caveat
 
