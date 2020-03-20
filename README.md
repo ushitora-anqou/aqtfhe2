@@ -2,7 +2,11 @@
 
 Yet another implementation of TFHE in C++17.
 
-About 7.7 ms/gate on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
+## Features
+
+- _Simple._ [Only \<1000 sloc](https://github.com/ushitora-anqou/aqtfhe2/blob/8a92ba015db0e26177fb84840e3d4fd50d275aed/aqtfhe2.hpp) (except spqlios).
+- _Fast._ About 7.7 ms/gate on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
+- _Secure._ Users don't have to use insecure PRNGs, but can use their favorite CSPRNGs (e.g. `std::random_device`).
 
 ## Simple Usage
 
