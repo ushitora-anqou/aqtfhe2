@@ -1,11 +1,11 @@
 # aqTFHE2
 
-Yet another implementation of TFHE in C++17.
+A header-only library of TFHE in C++17.
 
 ## Features
 
-- _Simple._ [Only \<1000 sloc](https://github.com/ushitora-anqou/aqtfhe2/blob/8a92ba015db0e26177fb84840e3d4fd50d275aed/aqtfhe2.hpp) (except spqlios).
-- _Fast._ About 7.7 ms/gate on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
+- _Simple._ aqTFHE2 is a single header library; it consists of only `aqtfhe2.hpp`.
+- _Fast._ About 9 ms/gate on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
 - _Secure._ Users don't have to use insecure PRNGs, but can use their favorite CSPRNGs (e.g. `std::random_device`).
 
 ## Simple Usage
@@ -34,13 +34,13 @@ int main()
 And compile it:
 
 ```
-$ clang++ -std=c++17 -march=native -O3 hoge.cpp -I spqlios/ -L spqlios/build/ -lspqlios
+$ g++ -std=c++17 -march=native -Ofast hoge.cpp
 $ ./a.out
 ```
 
 ## Performance
 
-About 7.7 ms/gate for old parameter [CGGI16], and 12.6 ms/gate for new parameter [CGGI19].
+About 9 ms/gate for old parameter [CGGI16], and 15 ms/gate for new parameter [CGGI19].
 Both are measured on Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz.
 
 You can verify it by using `main.cpp`:
@@ -48,8 +48,8 @@ You can verify it by using `main.cpp`:
 ```
 $ make     # Compile main.cpp
 $ ./main   # Run
-Old parameter [CGGI16]:	7650us / gate
-New parameter [CGGI19]:	12570us / gate
+Old parameter [CGGI16]:	8972us / gate
+New parameter [CGGI19]:	14963us / gate
 ```
 
 See [TFHE's web site](https://tfhe.github.io/tfhe/security_and_params.html)
@@ -68,8 +68,8 @@ pseudo-random number generator (CSPRNG) in C++ standard library
 This project is licensed under Apache License Version 2.0.
 See the file LICENSE.
 
-However the directory `spqlios/` is not my work but [TFHE](https://tfhe.github.io/tfhe/)'s one.
-See the file `spqlios/LICENSE`.
+A part of `aqtfhe2.hpp` is copied and modified from [TFHE](https://tfhe.github.io/tfhe/).
+See the comments in `aqtfhe2.hpp` for the details.
 
 ## References
 

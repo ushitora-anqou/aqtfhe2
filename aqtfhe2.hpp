@@ -6,10 +6,6 @@
 #include <memory>
 #include <random>
 
-//////////////// FIXME ////////////////////
-#include <spqlios-fft.h>
-//////////////// FIXME ////////////////////
-
 namespace aqtfhe2 {
 namespace params {
 struct CGGI16 {
@@ -223,6 +219,8 @@ public:
 
 template <class T, size_t... Shape>
 class nd_array {
+    static_assert(sizeof...(Shape) >= 1, "Empty nd_array is invalid.");
+
 public:
     static constexpr size_t size() noexcept
     {
@@ -298,6 +296,10 @@ public:
     {
         return data_.begin();
     }
+    constexpr const_iterator cbegin() const noexcept
+    {
+        return data_.cbegin();
+    }
 
     constexpr iterator end() noexcept
     {
@@ -306,6 +308,10 @@ public:
     constexpr const_iterator end() const noexcept
     {
         return data_.end();
+    }
+    constexpr const_iterator cend() const noexcept
+    {
+        return data_.cend();
     }
 
     constexpr T *data() noexcept
@@ -390,26 +396,355 @@ inline uint32_t mod_switch_from_torus32(uint32_t Msize, uint32_t phase)
     return static_cast<uint32_t>(phase64 / interv);
 }
 
-//////////////// FIXME ////////////////////
+/*
+    NOTE: The following FFT implementation (from "FROM HERE" to "TO HERE") is
+    copied and modified from TFHE's spqlios.
+    See TFHE's source code for the details (https://github.com/tfhe/tfhe).
+    TFHE is licensed under Apache-2.0:
+
+        Copyright 2016 - Nicolas Gama <nicolas.gama@gmail.com> et al.
+
+        Licensed under the Apache License, Version 2.0 (the "License");
+        you may not use this file except in compliance with the License.
+        You may obtain a copy of the License at
+
+            http://www.apache.org/licenses/LICENSE-2.0
+
+        Unless required by applicable law or agreed to in writing, software
+        distributed under the License is distributed on an "AS IS" BASIS,
+        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        See the License for the specific language governing permissions and
+        limitations under the License.
+
+    ----- FFT IMPLEMENTATION FROM HERE -----
+*/
+inline double accurate_cos(int32_t i, int32_t n)
+{
+    i = ((i % n) + n) % n;
+    const double nd = n;
+    const double pi = 3.1415926535897932384626433832795028;
+
+    if (i >= 3 * n / 4)
+        return std::cos(2. * pi * (n - i) / nd);
+    if (i >= 2 * n / 4)
+        return -std::cos(2. * pi * (i - n / 2) / nd);
+    if (i >= 1 * n / 4)
+        return -std::cos(2. * pi * (n / 2 - i) / nd);
+    return std::cos(2. * pi * (i) / nd);
+}
+
+inline double accurate_sin(int32_t i, int32_t n)
+{
+    i = ((i % n) + n) % n;
+    const double nd = n;
+    const double pi = 3.1415926535897932384626433832795028;
+
+    if (i >= 3 * n / 4)
+        return -sin(2. * pi * (n - i) / nd);
+    if (i >= 2 * n / 4)
+        return -sin(2. * pi * (i - n / 2) / nd);
+    if (i >= 1 * n / 4)
+        return sin(2. * pi * (n / 2 - i) / nd);
+    return sin(2. * pi * (i) / nd);
+}
+
+template <class RandomAccessIterator0, class RandomAccessIterator1,
+          class RandomAccessIterator2>
+inline void dotp4(RandomAccessIterator0 res, RandomAccessIterator1 a,
+                  RandomAccessIterator2 b)
+{
+    for (size_t i = 0; i < 4; i++)
+        res[i] = a[i] * b[i];
+}
+
+template <class RandomAccessIterator0, class RandomAccessIterator1,
+          class RandomAccessIterator2>
+inline void add4(RandomAccessIterator0 res, RandomAccessIterator1 a,
+                 RandomAccessIterator2 b)
+{
+    for (size_t i = 0; i < 4; i++)
+        res[i] = a[i] + b[i];
+}
+
+template <class RandomAccessIterator0, class RandomAccessIterator1,
+          class RandomAccessIterator2>
+inline void sub4(RandomAccessIterator0 res, RandomAccessIterator1 a,
+                 RandomAccessIterator2 b)
+{
+    for (size_t i = 0; i < 4; i++)
+        res[i] = a[i] - b[i];
+}
+
+template <class RandomAccessIterator0, class RandomAccessIterator1>
+inline void copy4(RandomAccessIterator0 res, RandomAccessIterator1 a)
+{
+    for (size_t i = 0; i < 4; i++)
+        res[i] = a[i];
+}
+
 template <size_t N>
 class fft_processor {
+    static_assert(N >= 16, "N must be >=16");
+    static_assert((N & (N - 1)) == 0, "N must be a power of 2");
+
 private:
-    FFT_Processor_Spqlios spqlios_;
+    nd_array<double, 2 * N> tables_direct_, tables_reverse_;
+
+private:
+    void fft(array_slice<double, N> out)
+    {
+        constexpr size_t n = N * 2, ns4 = n / 4;
+        double tmp0[4], tmp1[4], tmp2[4], tmp3[4];
+        auto itre = out.begin(), itim = out.begin() + ns4;
+
+        // size 2
+        for (size_t block = 0; block < ns4; block += 4) {
+            auto re = itre + block;
+            auto im = itim + block;
+
+            tmp0[0] = re[0] + re[1];
+            tmp0[1] = re[0] - re[1];
+            tmp0[2] = re[2] + re[3];
+            tmp0[3] = re[2] - re[3];
+            copy4(re, tmp0);
+
+            tmp1[0] = im[0] + im[1];
+            tmp1[1] = im[0] - im[1];
+            tmp1[2] = im[2] + im[3];
+            tmp1[3] = im[2] - im[3];
+            copy4(im, tmp1);
+        }
+
+        // size 4
+        for (size_t block = 0; block < ns4; block += 4) {
+            auto re = itre + block;
+            auto im = itim + block;
+
+            tmp0[0] = re[0] + re[2];
+            tmp0[1] = re[1] + im[3];
+            tmp0[2] = re[0] - re[2];
+            tmp0[3] = re[1] - im[3];
+
+            tmp1[0] = im[0] + im[2];
+            tmp1[1] = im[1] - re[3];
+            tmp1[2] = im[0] - im[2];
+            tmp1[3] = im[1] + re[3];
+
+            copy4(re, tmp0);
+            copy4(im, tmp1);
+        }
+
+        // general loop
+        auto cur_tt = tables_direct_.cbegin();
+        for (size_t halfnn = 4; halfnn < ns4; halfnn *= 2) {
+            size_t nn = 2 * halfnn;
+            for (size_t block = 0; block < ns4; block += nn) {
+                for (size_t off = 0; off < halfnn; off += 4) {
+                    auto re0 = itre + block + off;
+                    auto im0 = itim + block + off;
+                    auto re1 = itre + block + halfnn + off;
+                    auto im1 = itim + block + halfnn + off;
+                    auto tcs = cur_tt + 2 * off;
+                    auto tsn = tcs + 4;
+
+                    dotp4(tmp0, re1, tcs);   // re*cos
+                    dotp4(tmp1, re1, tsn);   // re*sin
+                    dotp4(tmp2, im1, tcs);   // im*cos
+                    dotp4(tmp3, im1, tsn);   // im*sin
+                    sub4(tmp0, tmp0, tmp3);  // re2
+                    add4(tmp1, tmp1, tmp2);  // im2
+                    add4(tmp2, re0, tmp0);   // re + re
+                    add4(tmp3, im0, tmp1);   // im + im
+                    sub4(tmp0, re0, tmp0);   // re - re
+                    sub4(tmp1, im0, tmp1);   // im - im
+                    copy4(re0, tmp2);
+                    copy4(im0, tmp3);
+                    copy4(re1, tmp0);
+                    copy4(im1, tmp1);
+                }
+            }
+            cur_tt += nn;
+        }
+
+        // multiply by omb^j
+        for (size_t j = 0; j < ns4; j += 4) {
+            auto r0 = cur_tt + 2 * j;
+            auto r1 = r0 + 4;
+            //(re*cos-im*sin) + i (im*cos+re*sin)
+            auto d0 = itre + j;
+            auto d1 = itim + j;
+
+            dotp4(tmp0, d0, r0);  // re*cos
+            dotp4(tmp1, d1, r0);  // im*cos
+            dotp4(tmp2, d0, r1);  // re*sin
+            dotp4(tmp3, d1, r1);  // im*sin
+            sub4(d0, tmp0, tmp3);
+            add4(d1, tmp1, tmp2);
+        }
+    }
+
+    void ifft(array_slice<double, N> out)
+    {
+        constexpr size_t n = N * 2, ns4 = n / 4;
+        double tmp0[4], tmp1[4], tmp2[4], tmp3[4];
+        auto itre = out.begin(), itim = out.begin() + ns4;
+
+        // multiply by omb^j
+        for (size_t j = 0; j < ns4; j += 4) {
+            auto r0 = tables_reverse_.cbegin() + 2 * j;
+            auto r1 = r0 + 4;
+            //(re*cos-im*sin) + i (im*cos+re*sin)
+            auto d0 = itre + j;
+            auto d1 = itim + j;
+
+            dotp4(tmp0, d0, r0);  // re*cos
+            dotp4(tmp1, d1, r0);  // im*cos
+            dotp4(tmp2, d0, r1);  // re*sin
+            dotp4(tmp3, d1, r1);  // im*sin
+            sub4(d0, tmp0, tmp3);
+            add4(d1, tmp1, tmp2);
+        }
+
+        // at the beginning of iteration nn
+        // a_{j,i} has P_{i%nn}(omega^j)
+        // where j between [rev(1) and rev(3)[
+        // and i between [0 and nn[
+        auto cur_tt = tables_reverse_.cbegin();
+        for (size_t nn = ns4; nn >= 8; nn /= 2) {
+            size_t halfnn = nn / 2;
+            cur_tt += 2 * nn;
+            for (size_t block = 0; block < ns4; block += nn) {
+                for (size_t off = 0; off < halfnn; off += 4) {
+                    auto d00 = itre + block + off;
+                    auto d01 = itim + block + off;
+                    auto d10 = itre + block + halfnn + off;
+                    auto d11 = itim + block + halfnn + off;
+                    add4(tmp0, d00, d10);  // re + re
+                    add4(tmp1, d01, d11);  // im + im
+                    sub4(tmp2, d00, d10);  // re - re
+                    sub4(tmp3, d01, d11);  // im - im
+                    copy4(d00, tmp0);
+                    copy4(d01, tmp1);
+                    auto r0 = cur_tt + 2 * off;
+                    auto r1 = r0 + 4;
+                    dotp4(tmp0, tmp2, r0);  // re*cos
+                    dotp4(tmp1, tmp3, r1);  // im*sin
+                    sub4(d10, tmp0, tmp1);
+                    dotp4(tmp0, tmp2, r1);  // re*sin
+                    dotp4(tmp1, tmp3, r0);  // im*cos
+                    add4(d11, tmp0, tmp1);
+                }
+            }
+        }
+
+        // size 4
+        for (size_t block = 0; block < ns4; block += 4) {
+            auto re = itre + block;
+            auto im = itim + block;
+
+            tmp0[0] = re[0] + re[2];
+            tmp0[1] = re[1] + re[3];
+            tmp0[2] = re[0] - re[2];
+            tmp0[3] = im[3] - im[1];
+
+            tmp1[0] = im[0] + im[2];
+            tmp1[1] = im[1] + im[3];
+            tmp1[2] = im[0] + -im[2];
+            tmp1[3] = re[1] + -re[3];
+
+            copy4(re, tmp0);
+            copy4(im, tmp1);
+        }
+
+        // size 2
+        for (size_t block = 0; block < ns4; block += 4) {
+            auto re = itre + block;
+            auto im = itim + block;
+
+            tmp0[0] = re[0] + re[1];
+            tmp0[1] = re[0] - re[1];
+            tmp0[2] = re[2] + re[3];
+            tmp0[3] = re[2] - re[3];
+            copy4(re, tmp0);
+
+            tmp1[0] = im[0] + im[1];
+            tmp1[1] = im[0] - im[1];
+            tmp1[2] = im[2] + im[3];
+            tmp1[3] = im[2] - im[3];
+            copy4(im, tmp1);
+        }
+    }
 
 public:
-    fft_processor() : spqlios_(N)
+    fft_processor()
     {
+        // new fft table
+        {
+            constexpr size_t n = 2 * N, ns4 = n / 4;
+            auto it = tables_direct_.begin();
+            for (size_t halfnn = 4; halfnn < ns4; halfnn *= 2) {
+                const size_t nn = 2 * halfnn;
+                const size_t j = n / nn;
+                for (size_t i = 0; i < halfnn; i += 4) {
+                    for (size_t k = 0; k < 4; k++)
+                        *it++ = accurate_cos(-j * (i + k), n);
+                    for (size_t k = 0; k < 4; k++)
+                        *it++ = accurate_sin(-j * (i + k), n);
+                }
+            }
+            // last iteration
+            for (size_t i = 0; i < ns4; i += 4) {
+                for (size_t k = 0; k < 4; k++)
+                    *it++ = accurate_cos(-(i + k), n);
+                for (size_t k = 0; k < 4; k++)
+                    *it++ = accurate_sin(-(i + k), n);
+            }
+        }
+
+        // new ifft table
+        {
+            constexpr size_t n = 2 * N, ns4 = n / 4;
+            auto it = tables_reverse_.begin();
+            // first iteration
+            for (size_t j = 0; j < ns4; j += 4) {
+                for (size_t k = 0; k < 4; k++)
+                    *it++ = accurate_cos(j + k, n);
+                for (size_t k = 0; k < 4; k++)
+                    *it++ = accurate_sin(j + k, n);
+            }
+            // subsequent iterations
+            for (size_t nn = ns4; nn >= 8; nn /= 2) {
+                size_t halfnn = nn / 2;
+                size_t j = n / nn;
+                for (size_t i = 0; i < halfnn; i += 4) {
+                    for (size_t k = 0; k < 4; k++)
+                        *it++ = accurate_cos(j * (i + k), n);
+                    for (size_t k = 0; k < 4; k++)
+                        *it++ = accurate_sin(j * (i + k), n);
+                }
+            }
+        }
     }
 
     void twist_fft_lvl1(array_slice<uint32_t, N> out,
                         const_array_slice<double, N> a)
     {
-        spqlios_.execute_direct_torus32(out.data(), a.data());
+        nd_array<double, N> tmp;
+        for (size_t i = 0; i < N; i++)
+            tmp[i] = a[i] * (2.0 / N);
+        fft(tmp.slice());
+        for (size_t i = 0; i < N; i++)
+            out[i] = static_cast<uint32_t>(static_cast<int64_t>(tmp[i]));
     }
     void twist_ifft_lvl1(array_slice<double, N> out,
                          const_array_slice<uint32_t, N> a)
     {
-        spqlios_.execute_reverse_torus32(out.data(), a.data());
+        nd_array<double, N> tmp;
+        for (size_t i = 0; i < N; i++)
+            tmp[i] = static_cast<int32_t>(a[i]);
+        ifft(tmp.slice());
+        for (size_t i = 0; i < N; i++)
+            out[i] = tmp[i];
     }
 
     nd_array<uint32_t, N> twist_fft_lvl1(const nd_array<double, N> &a)
@@ -425,7 +760,9 @@ public:
         return ret;
     }
 };
-//////////////// FIXME ////////////////////
+/*
+   ----- FFT IMPLEMENTATION TO HERE -----
+*/
 
 }  // namespace detail
 
